@@ -1,0 +1,32 @@
+[package]
+name = "pgctl"
+description = "Playground CLI tool to control settings"
+version = "0.1.3"
+edition = "2021"
+authors = ["nabin.acharya@gmail.com"]
+readme = "README.md"
+license = "MIT"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5.1", features = ["cargo", "derive"] }
+actix-web = "4"
+log = { version = "0.4.21",  features = ["std"] }
+env_logger = "0.11.3"
+serde = "1.0.198"
+serde_json = "1.0.116"
+serde_derive = "1.0.198"
+dirs = "5.0.1"
+text_io = "0.1.12"
+
+
+[package.metadata.deb]
+name = "pgctl"
+section = "admin"
+priority = "optional"
+assets = [
+    ["target/release/pgctl", "/usr/bin/pgctl", "755"],
+]
