@@ -1,0 +1,11 @@
+# infra/gcp/terraform.tfvars.example
+# =====================================
+# Copy to terraform.tfvars and fill in real values.
+# Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or use ADC.
+
+project_id = "my-gcp-project-id"
+region     = "us-central1"
+environment = "dev"
+image_tag  = "latest"
+
+allow_unauthenticated = true   # Set false in production

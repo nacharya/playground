@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>PlaygroundApi</AssemblyName>
+    <RootNamespace>PlaygroundApi</RootNamespace>
+    <!-- F# compiler options -->
+    <Nullable>enable</Nullable>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!-- F# files must be listed in COMPILATION ORDER. A file can only reference
+       types/functions defined in files ABOVE it in this list. This is a key
+       difference from C# — the compiler enforces dependency order explicitly.
+       This prevents circular dependencies and makes the build deterministic. -->
+  <ItemGroup>
+    <Compile Include="Domain/Types.fs" />
+    <Compile Include="Domain/Railway.fs" />
+    <Compile Include="Domain/Validation.fs" />
+    <Compile Include="Examples/Sequences.fs" />
+    <Compile Include="Examples/ComputationExpressions.fs" />
+    <Compile Include="Examples/ActivePatterns.fs" />
+    <Compile Include="Examples/Pipeline.fs" />
+    <Compile Include="Handlers/UserHandlers.fs" />
+    <Compile Include="Handlers/RealmHandlers.fs" />
+    <Compile Include="Handlers/TaskHandlers.fs" />
+    <Compile Include="Grpc/PlaygroundGrpcService.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- gRPC server runtime — use separate packages to avoid Grpc.Tools
+         proto auto-compilation which only works in .csproj projects.
+         Proto stubs are generated manually via `make proto` and committed. -->
+    <PackageReference Include="Grpc.AspNetCore.Server" Version="2.60.0" />
+    <PackageReference Include="Grpc.Core" Version="2.46.6" />
+    <!-- JSON serialization -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
+    <!-- FSharp.Core is included automatically via SDK, but we pin for clarity -->
+    <PackageReference Include="FSharp.Core" Version="8.0.100" />
+  </ItemGroup>
+
+</Project>

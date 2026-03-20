@@ -1,0 +1,33 @@
+# infra/aws/terraform.tfvars.example
+# ====================================
+# Copy to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit secrets.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+
+aws_region  = "us-east-1"
+environment = "dev"
+
+# Networking
+vpc_cidr           = "10.0.0.0/16"
+az_count           = 2
+enable_nat_gateway = false   # Set true when services need outbound internet
+
+# Storage
+s3_suffix = "123456789"   # Use your AWS account ID for global uniqueness
+
+# Container images
+ecr_base_url = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
+image_tag    = "latest"
+
+# Database (use SSM/Secrets Manager in production instead of tfvars)
+db_host     = "postgres.cluster.local"
+db_user     = "playground"
+db_password = "CHANGE_ME"
+db_name     = "playground"
+
+# NATS
+nats_host = "nats.cluster.local"
+
+# Logs
+log_retention_days = 7

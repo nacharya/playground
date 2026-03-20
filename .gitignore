@@ -19,3 +19,52 @@
 
 # Go workspace file
 go.work
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+*.env.local
+.DS_Store
+
+# ── Go binaries ───────────────────────────────────────────────────────────────
+goffj/*-bin
+
+# ── Rust ──────────────────────────────────────────────────────────────────────
+pgctl/target/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyd
+.venv/
+venv/
+*.egg-info/
+playui/pytorch/datasets/
+playui/.streamlit/
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+tsnode/dist/
+reactapp/dist/
+
+# ── F# / .NET ─────────────────────────────────────────────────────────────────
+fsharp/**/bin/
+fsharp/**/obj/
+*.user
+.vs/
+
+# ── Terraform ─────────────────────────────────────────────────────────────────
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.backup
+infra/**/*.tfvars
+!infra/**/*.tfvars.example
+infra/**/.terraform.lock.hcl
+
+# ── Protobuf generated stubs ──────────────────────────────────────────────────
+**/*_pb2.py
+**/*_pb2_grpc.py
+**/*.pb.go
+
+# ── Runtime data ──────────────────────────────────────────────────────────────
+data/*
+!data/.gitkeep

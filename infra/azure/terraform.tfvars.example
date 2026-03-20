@@ -1,0 +1,15 @@
+# infra/azure/terraform.tfvars.example
+# ======================================
+# Copy to terraform.tfvars and fill in real values.
+# Run `az ad sp create-for-rbac --name playground-sp --role Contributor` to create a service principal.
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "00000000-0000-0000-0000-000000000000"
+client_id       = "00000000-0000-0000-0000-000000000000"
+client_secret   = "CHANGE_ME"
+
+location    = "eastus"
+environment = "dev"
+image_tag   = "latest"
+
+log_retention_days = 30

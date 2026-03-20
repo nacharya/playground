@@ -1,0 +1,353 @@
+// playground.proto — Shared Service Contracts
+// =============================================
+//
+// This is the single source of truth for ALL service interfaces in the playground.
+// Every service (Go, Rust, TypeScript, F#, Python) generates its stubs from this file.
+//
+// Protocol Buffers (proto3) is a language-neutral, platform-neutral interface
+// definition language. The benefits over ad-hoc REST:
+//   - Binary encoding (~5-10x smaller than JSON)
+//   - Strongly typed contracts enforced at compile time
+//   - Code generation for every major language
+//   - Built-in streaming (client, server, bidirectional)
+//
+// Generate stubs (run from repo root):
+//   Go:         protoc --go_out=goffj/grpc/pb --go-grpc_out=goffj/grpc/pb -I proto proto/playground.proto
+//   Python:     python -m grpc_tools.protoc -I proto --python_out=playui/proto --grpc_python_out=playui/proto proto/playground.proto
+//   TypeScript: npx protoc --ts_out=tsnode/src/proto -I proto proto/playground.proto
+//   Rust:       tonic-build via build.rs (see pgctl/build.rs)
+//   F#:         Grpc.Tools NuGet package (auto-generates on dotnet build)
+//
+// gRPC port allocation:
+//   goffj  (Go)         : 8510
+//   pgctl  (Rust)       : 8511
+//   playui (Python)     : 8512
+//   tsnode (TypeScript) : 8513
+//   fsharp (F#)         : 8509
+
+syntax = "proto3";
+
+package playground;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "goffj/grpc/pb";
+
+// ─────────────────────────────────────────────
+// Domain Messages
+// ─────────────────────────────────────────────
+
+// Realm represents an authentication/authorization boundary.
+// Users and Apps belong to one or more Realms.
+// Example realms: "corp-azure-ad", "dev-aws", "external-ldap"
+message Realm {
+  string id           = 1; // Unique identifier (e.g., UUID or slug)
+  string name         = 2; // Short one-word name, tied to ID
+  bool   active       = 3; // Whether this realm is currently active
+  string type         = 4; // AD | AZURE | AWS | LDAP | UserShared
+  string owner        = 5; // Username of the realm owner
+  string tenant       = 6; // Human-readable tenant description
+  string auth_provider = 7; // Auth0, Firebase, KeyCloak, etc.
+}
+
+// App is a registered application that can belong to multiple Realms.
+// Think of it as a service or micro-app that users can access.
+message App {
+  string   id     = 1;
+  string   name   = 2;
+  bool     active = 3;
+  repeated string realm_ids = 4; // Realms this app is registered in
+}
+
+// User represents a person who can access Apps within Realms.
+// Role determines what they can do: Admin > Contributor > ReadOnly.
+message User {
+  string   id          = 1;
+  string   username    = 2; // Unique login name
+  string   email       = 3; // Contact email (required)
+  string   name        = 4; // Display name
+  string   role        = 5; // Admin | Contributor | ReadOnly
+  string   created_at  = 6; // ISO 8601 creation timestamp
+  string   last_access = 7; // ISO 8601 last login timestamp
+  repeated string realm_ids = 8; // Realms this user belongs to
+}
+
+// Task is a unit of work assigned to a user within the system.
+// Tracks completion state and due dates.
+message Task {
+  string id        = 1;
+  string name      = 2;
+  string text      = 3; // Full description / body
+  bool   completed = 4;
+  string uid       = 5; // Assigned user ID
+  google.protobuf.Timestamp due = 6; // Due date
+}
+
+// Message is a generic key-value payload for pub/sub messaging.
+// Used with NATS for event broadcasting.
+message Message {
+  string keyname = 1;
+  string content = 2;
+}
+
+// ─────────────────────────────────────────────
+// Request / Response Messages
+// ─────────────────────────────────────────────
+// Convention: each RPC has its own request/response pair.
+// This avoids "stringly typed" APIs and makes adding fields backwards-compatible.
+
+// --- User ---
+
+message GetUserRequest {
+  string username = 1; // Look up by username
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+message ListUsersRequest {
+  string realm_id  = 1; // Optional: filter by realm
+  int32  page_size = 2; // 0 = return all
+  string page_token = 3; // Pagination cursor
+}
+
+message ListUsersResponse {
+  repeated User users     = 1;
+  string        next_page_token = 2; // Empty if no more pages
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string email    = 2;
+  string name     = 3;
+  string role     = 4;
+  repeated string realm_ids = 5;
+}
+
+message CreateUserResponse {
+  User user = 1;
+}
+
+message UpdateUserRequest {
+  string id    = 1;
+  string email = 2;
+  string name  = 3;
+  string role  = 4;
+}
+
+message UpdateUserResponse {
+  User user = 1;
+}
+
+message DeleteUserRequest {
+  string id = 1;
+}
+
+message DeleteUserResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// --- Realm ---
+
+message GetRealmRequest {
+  string name = 1;
+}
+
+message GetRealmResponse {
+  Realm realm = 1;
+}
+
+message ListRealmsRequest {
+  bool only_active = 1;
+}
+
+message ListRealmsResponse {
+  repeated Realm realms = 1;
+}
+
+message CreateRealmRequest {
+  string name          = 1;
+  string type          = 2;
+  string owner         = 3;
+  string tenant        = 4;
+  string auth_provider = 5;
+}
+
+message CreateRealmResponse {
+  Realm realm = 1;
+}
+
+message UpdateRealmRequest {
+  string id     = 1;
+  bool   active = 2;
+  string tenant = 3;
+}
+
+message UpdateRealmResponse {
+  Realm realm = 1;
+}
+
+message DeleteRealmRequest {
+  string id = 1;
+}
+
+message DeleteRealmResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+// --- Task ---
+
+message GetTaskRequest {
+  string id = 1;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+}
+
+message ListTasksRequest {
+  string uid          = 1; // Filter by assigned user; empty = all
+  bool   only_pending = 2; // If true, exclude completed tasks
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+}
+
+message CreateTaskRequest {
+  string name = 1;
+  string text = 2;
+  string uid  = 3;
+  google.protobuf.Timestamp due = 4;
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+message UpdateTaskRequest {
+  string id        = 1;
+  bool   completed = 2;
+  string text      = 3;
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+message DeleteTaskRequest {
+  string id = 1;
+}
+
+message DeleteTaskResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+// --- App ---
+
+message GetAppRequest {
+  string name = 1;
+}
+
+message GetAppResponse {
+  App app = 1;
+}
+
+message ListAppsRequest {
+  string realm_id = 1; // Optional: filter by realm
+}
+
+message ListAppsResponse {
+  repeated App apps = 1;
+}
+
+message CreateAppRequest {
+  string name = 1;
+  repeated string realm_ids = 2;
+}
+
+message CreateAppResponse {
+  App app = 1;
+}
+
+message UpdateAppRequest {
+  string id     = 1;
+  bool   active = 2;
+  repeated string realm_ids = 3;
+}
+
+message UpdateAppResponse {
+  App app = 1;
+}
+
+message DeleteAppRequest {
+  string id = 1;
+}
+
+message DeleteAppResponse {
+  bool   success = 1;
+  string message = 2;
+}
+
+// ─────────────────────────────────────────────
+// Service Definitions
+// ─────────────────────────────────────────────
+// Each service maps directly to a REST resource in the goffj HTTP API.
+// The gRPC and REST APIs expose the same domain operations — just different protocols.
+
+// UserService manages the lifecycle of users across realms.
+service UserService {
+  // GetUser retrieves a user by username.
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // ListUsers returns all users, optionally filtered by realm.
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+
+  // CreateUser registers a new user. Returns error if username exists.
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+
+  // UpdateUser modifies mutable fields (email, name, role).
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+
+  // DeleteUser removes a user permanently.
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
+  // WatchUsers streams user change events (create/update/delete).
+  // Clients stay connected and receive events in real time.
+  rpc WatchUsers(ListUsersRequest) returns (stream User);
+}
+
+// RealmService manages authentication/authorization boundaries.
+service RealmService {
+  rpc GetRealm(GetRealmRequest) returns (GetRealmResponse);
+  rpc ListRealms(ListRealmsRequest) returns (ListRealmsResponse);
+  rpc CreateRealm(CreateRealmRequest) returns (CreateRealmResponse);
+  rpc UpdateRealm(UpdateRealmRequest) returns (UpdateRealmResponse);
+  rpc DeleteRealm(DeleteRealmRequest) returns (DeleteRealmResponse);
+}
+
+// TaskService manages work items assigned to users.
+service TaskService {
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
+
+  // StreamTasks is a server-streaming RPC: the server pushes task
+  // updates to the client continuously (e.g., for a live dashboard).
+  rpc StreamTasks(ListTasksRequest) returns (stream Task);
+}
+
+// AppService manages registered applications.
+service AppService {
+  rpc GetApp(GetAppRequest) returns (GetAppResponse);
+  rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
+  rpc CreateApp(CreateAppRequest) returns (CreateAppResponse);
+  rpc UpdateApp(UpdateAppRequest) returns (UpdateAppResponse);
+  rpc DeleteApp(DeleteAppRequest) returns (DeleteAppResponse);
+}

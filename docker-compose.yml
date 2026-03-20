@@ -1,0 +1,241 @@
+# Playground Docker Compose
+# ==========================
+#
+# Starts all 8 playground services in a shared network.
+# Services communicate using container names as hostnames.
+#
+# Quick start:
+#   cp .env.example .env   # fill in your values
+#   docker compose up -d   # start everything
+#   docker compose logs -f # follow logs
+#   docker compose down    # stop everything
+#
+# Individual service groups:
+#   docker compose up -d postgres nats goffj  # Go stack
+#   docker compose up -d playui               # Python stack
+#   docker compose up -d tsnode reactapp      # TypeScript + React
+#   docker compose up -d fsharp               # F# stack
+#
+# Service discovery:
+#   Each service reaches others by container name (Docker DNS).
+#   Example: playui → http://goffj:8500/healthcheck
+
+networks:
+  # All services join this bridge network
+  # Docker provides DNS: container name → IP address
+  playground_net:
+    driver: bridge
+
+volumes:
+  postgres_data:  # Persists DB data across container restarts
+  nats_data:      # Persists NATS JetStream messages
+
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+# ─────────────────────────────────────────────────────────────────────────────
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    networks: [playground_net]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-playground}
+      POSTGRES_USER:     ${POSTGRES_USER:-playground}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-playground_dev_only}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-playground}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # NOT exposed to host — internal only (security best practice)
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.10-alpine
+    networks: [playground_net]
+    volumes:
+      - nats_data:/data
+    # -js enables JetStream (persistent messaging, replay, consumers)
+    command: "-js -sd /data"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    # NOT exposed to host — internal only
+    restart: unless-stopped
+
+  # ── Go service (goffj) ──────────────────────────────────────────────────────
+
+  goffj:
+    build:
+      context: ./goffj
+      dockerfile: Dockerfile
+    networks: [playground_net]
+    ports:
+      - "8500:8500"   # REST API
+      - "8501:8501"   # Admin/secondary
+      - "8510:8510"   # gRPC
+    environment:
+      GIN_MODE:           release
+      GOFFJ_PORT:         ":8500"
+      GOFFJ_GRPC_PORT:    ":8510"
+      NATS_URL:           nats://nats:4222
+      DATABASE_URL:       postgres://${POSTGRES_USER:-playground}:${POSTGRES_PASSWORD:-playground_dev_only}@postgres:5432/${POSTGRES_DB:-playground}?sslmode=disable
+      AWS_ACCESS_KEY_ID:  ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION:         ${AWS_REGION:-us-east-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8500/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # ── Rust service (pgctl) ────────────────────────────────────────────────────
+
+  pgctl:
+    build:
+      context: ./pgctl
+      dockerfile: Dockerfile
+    networks: [playground_net]
+    ports:
+      - "8502:8502"     # HTTP/REST
+      - "8503:8503/udp" # UDP server
+      - "8511:8511"     # gRPC
+    environment:
+      RUST_LOG:         info
+      PGCTL_PORT:       8502
+      PGCTL_GRPC_PORT:  8511
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8502/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # ── Python service (playui) ─────────────────────────────────────────────────
+
+  playui:
+    build:
+      context: ./playui
+      dockerfile: Dockerfile
+    networks: [playground_net]
+    ports:
+      - "8504:8504"  # Streamlit UI
+      - "8505:8505"  # FastAPI REST
+      - "8512:8512"  # gRPC
+    environment:
+      GOFFJ_API_URL:        http://goffj:8500
+      STREAMLIT_SERVER_PORT: "8504"
+      GRPC_PORT:            "8512"
+      REST_PORT:            "8505"
+      PYTORCH_DEVICE:       cpu
+    depends_on:
+      goffj:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8504/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # ── TypeScript service (tsnode) ─────────────────────────────────────────────
+
+  tsnode:
+    build:
+      context: ./tsnode
+      dockerfile: Dockerfile
+    networks: [playground_net]
+    ports:
+      - "8506:8506"  # HTTP / tRPC
+      - "8507:8507"  # WebSocket
+      - "8513:8513"  # gRPC
+    environment:
+      NODE_ENV:        production
+      PORT:            "8506"
+      WS_PORT:         "8507"
+      GRPC_PORT:       "8513"
+      GOFFJ_API_URL:   http://goffj:8500
+      JWT_SECRET:      ${JWT_SECRET:-dev-secret-change-in-production}
+    depends_on:
+      goffj:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8506/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── F# service (fsharp) ─────────────────────────────────────────────────────
+
+  fsharp:
+    build:
+      context: ./fsharp
+      dockerfile: Dockerfile
+    networks: [playground_net]
+    ports:
+      - "8508:8508"  # REST API (ASP.NET Core)
+      - "8509:8509"  # gRPC
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS:        http://+:8508
+      GOFFJ_API_URL:          http://goffj:8500
+    depends_on:
+      goffj:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8508/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── React frontend (reactapp) ───────────────────────────────────────────────
+
+  reactapp:
+    build:
+      context: ./reactapp
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api           # nginx proxies /api → goffj:8500
+        VITE_TRPC_URL:     /trpc          # nginx proxies /trpc → tsnode:8506
+        VITE_WS_URL:       ws://localhost/ws  # nginx proxies /ws → tsnode:8507
+    networks: [playground_net]
+    ports:
+      - "80:80"    # nginx production server
+      - "3000:80"  # Also accessible on 3000 (convenience alias)
+    depends_on:
+      tsnode:
+        condition: service_healthy
+      goffj:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
