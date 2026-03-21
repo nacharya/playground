@@ -27,6 +27,9 @@ RUN dotnet publish PlaygroundApi/PlaygroundApi.fsproj \
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
 # dotnet/aspnet:8.0 already includes a non-root 'app' user (UID 1654)
+# Install curl for the healthcheck (Debian-based image, no curl by default)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=builder --chown=app:app /publish ./
 

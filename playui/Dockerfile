@@ -25,6 +25,9 @@ FROM python:3.12-slim AS runtime
 # Copy installed packages from builder (no gcc needed at runtime)
 COPY --from=builder /install /usr/local
 
+# Install wget for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user for security
 RUN addgroup --system app && adduser --system --ingroup app app
 

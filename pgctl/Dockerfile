@@ -25,7 +25,7 @@ RUN touch src/main.rs && \
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache ca-certificates wget
 
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
@@ -37,6 +37,13 @@ USER app
 EXPOSE 8502 8503 8511
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8502/ || exit 1
+  CMD wget -qO- http://localhost:8502/ || exit 1
 
-CMD ["/app/pgctl", "server", "-s"]
+# pgctl reads ~/.config/pgctl/pgctl (JSON). Write it at container start
+# so the server uses the correct Docker hostname/port instead of localhost:9090.
+# Using a shell entrypoint lets us create the config before exec-ing the binary.
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["mkdir -p /home/app/.config/pgctl && \
+  printf '{\"name\":\"pgctl\",\"hostname\":\"0.0.0.0\",\"port\":8502,\"udpport\":8503,\"loglevel\":\"info\"}' \
+  > /home/app/.config/pgctl/pgctl && \
+  exec /app/pgctl server -s"]

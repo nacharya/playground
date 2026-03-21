@@ -1,8 +1,8 @@
 #!/bin/sh
 # start.sh — Launch Streamlit + FastAPI concurrently
 # ====================================================
-# Both servers run in the background; the script waits for either to exit.
-# If one crashes, the container exits (allowing Docker to restart it).
+# Both servers run in the background; the script polls until either exits.
+# Using a polling loop because `wait -n` is bash 5.1+ and not available in sh/dash.
 
 set -e
 
@@ -21,10 +21,18 @@ FASTAPI_PID=$!
 echo "Streamlit PID: $STREAMLIT_PID (port ${STREAMLIT_SERVER_PORT:-8504})"
 echo "FastAPI/gRPC PID: $FASTAPI_PID (port 8505)"
 
-# Wait for either process to exit
-wait -n $STREAMLIT_PID $FASTAPI_PID
-EXIT_CODE=$?
-
-echo "A server exited with code $EXIT_CODE — shutting down"
-kill $STREAMLIT_PID $FASTAPI_PID 2>/dev/null || true
-exit $EXIT_CODE
+# Poll every 5s until one of the processes exits
+while true; do
+    sleep 5
+    # kill -0 checks if process is alive without sending a signal
+    if ! kill -0 "$STREAMLIT_PID" 2>/dev/null; then
+        echo "Streamlit (PID $STREAMLIT_PID) exited — shutting down"
+        kill "$FASTAPI_PID" 2>/dev/null || true
+        exit 1
+    fi
+    if ! kill -0 "$FASTAPI_PID" 2>/dev/null; then
+        echo "FastAPI (PID $FASTAPI_PID) exited — shutting down"
+        kill "$STREAMLIT_PID" 2>/dev/null || true
+        exit 1
+    fi
+done
